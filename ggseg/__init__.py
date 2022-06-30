@@ -32,11 +32,11 @@ def _svg_parse_(path):
     return np.array(codes), np.concatenate(vertices)
 
 
-def _add_colorbar_(ax, cmap, norm, ec, labelsize, ylabel):
+def _add_colorbar_(ax, cmap, norm, ec, labelsize, ylabel, cbsize=1, cbpad=1):
     import matplotlib
     from mpl_toolkits.axes_grid1 import make_axes_locatable
     divider = make_axes_locatable(ax)
-    cax = divider.append_axes('right', size='1%', pad=1)
+    cax = divider.append_axes('right', size=f'{cbsize}%', pad=cbpad)
 
     cb1 = matplotlib.colorbar.ColorbarBase(cax, cmap=cmap,
                                            norm=norm,
@@ -303,4 +303,81 @@ def plot_aseg(data, cmap='Spectral', background='k', edgecolor='w', ylabel='',
     # A colorbar is added
     _add_colorbar_(ax, cmap, norm, edgecolor, fontsize*0.75, ylabel)
 
+    plt.show()
+
+
+def plot_vep(data, cmap='Spectral', background='w', edgecolor='k', ylabel='',
+              figsize=(10, 8), bordercolor='grey', vminmax=[],
+              title='', fontsize=15):
+    import matplotlib.pyplot as plt
+    import os.path as op
+    from glob import glob
+    import ggseg
+
+    # possible orientations
+    orientations = ['external_left', 'internal_left', 'front_left']
+
+    # get names of all brain regions
+    wd = op.join(op.dirname(ggseg.__file__), 'data', 'vep')
+    reg = [op.basename(e) for e in glob(op.join(wd, '*'))]
+
+    # rebuild data for matching with orientations
+    data_n = {}
+    for k, v in data.items():
+        for ori in orientations:
+            new_key = f"{k}_{ori}"
+            if new_key in reg:
+                data_n[new_key] = v
+
+    # Select data from known regions (prevents colorbar from going wild)
+    known_values = []
+    for k, v in data_n.items():
+        if k in reg:
+            known_values.append(v)
+
+    whole_reg = [f"cortex_{ori}" for ori in orientations]
+    files = [open(op.join(wd, e)).read() for e in whole_reg]
+
+    # A figure is created by the joint dimensions of the whole-brain outlines
+    ax = _create_figure_(files, figsize, background,  title, fontsize, edgecolor)
+
+    # gray background cortex
+    _render_regions_(files, ax, bordercolor, edgecolor)
+
+    # Each region is outlined
+    reg = glob(op.join(wd, '*'))
+    files = [open(e).read() for e in reg if 'cortex' not in e]
+    _render_regions_(files, ax, "lightgray", edgecolor)
+
+    # For every region with a provided value, we draw a patch with the color
+    # matching the normalized scale
+    cmap, norm = _get_cmap_(cmap, known_values, vminmax=vminmax)
+    _render_data_(data_n, wd, cmap, norm, ax, edgecolor)
+
+        # A colorbar is added
+    _add_colorbar_(ax, cmap, norm, edgecolor, fontsize * 0.75, ylabel,
+                   cbsize=3, cbpad=2)
+
+    return plt.gcf()
+
+
+if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+    import os
+    import numpy as np
+
+    files = os.listdir('data/vep')
+    _data = np.random.rand(len(files))
+    # data = {}
+    # for n_f, f in enumerate(files):
+    #     if 'cortex' in f: continue
+    #     data[f] = _data[n_f]
+
+    data = {
+        '1': 11,
+        '2': 33,
+        '23': 44
+    }
+
+    plot_vep(data, cmap='plasma', bordercolor='gray', background='w', edgecolor='k', ylabel='Mes Couilles')
     plt.show()
