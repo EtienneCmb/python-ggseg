@@ -58,7 +58,7 @@ def _render_data_(data, wd, cmap, norm, ax, edgecolor):
             path = Path(verts, codes)
             c = cmap(norm(v))
             ax.add_patch(patches.PathPatch(path, facecolor=c,
-                                           edgecolor=edgecolor, lw=1))
+                                           edgecolor=edgecolor, lw=.5))
         else:
             # print('%s not found' % fp)
             pass
@@ -93,11 +93,14 @@ def _render_regions_(files, ax, facecolor, edgecolor):
     path = Path(verts, codes)
 
     ax.add_patch(patches.PathPatch(path, facecolor=facecolor,
-                                   edgecolor=edgecolor, lw=1))
+                                   edgecolor=edgecolor, lw=.1))
 
 
 def _get_cmap_(cmap, values, vminmax=[]):
     import matplotlib
+
+    if not len(values):
+        values = [0, 1]
 
     cmap = matplotlib.cm.get_cmap(cmap)
     if vminmax == []:
@@ -361,23 +364,125 @@ def plot_vep(data, cmap='Spectral', background='w', edgecolor='k', ylabel='',
     return plt.gcf()
 
 
+def plot_marsatlas(
+        data, lr=True, cmap='Spectral', background='w', edgecolor='k', ylabel='',
+        figsize=(10, 8), bordercolor='grey', vminmax=[], title='', fontsize=15
+    ):
+    import matplotlib.pyplot as plt
+    import os.path as op
+    from glob import glob
+    import ggseg
+
+    # possible orientations
+    if lr:
+        orientations = [
+            'external_left', 'internal_left', 'external_right',
+            'internal_right'
+        ]
+    else:
+        orientations = ['external_left', 'internal_left']
+
+    # get names of all brain regions
+    wd = op.join(op.dirname(ggseg.__file__), 'data', 'marsatlas')
+    reg = [op.basename(e) for e in glob(op.join(wd, '*'))]
+
+    # add left and right information (if needed)
+    # if lr:
+    #     for k in range(len(reg)):
+    #         h = 'L' if 'left' in reg[k] else 'R'
+    #         reg[k] = f'{h}_{reg[k]}'
+
+    # rebuild data for matching with orientations
+    data_n = {}
+    for k, v in data.items():
+        if lr:
+            orient = 'left' if 'L_' in k else 'right'
+            for ori in [f"external_{orient}", f"internal_{orient}"]:
+                new_key = f"{k.split('_')[-1]}_{ori}"
+                if new_key in reg:
+                    data_n[new_key] = v
+        else:
+            for ori in orientations:
+                new_key = f"{k}_{ori}"
+                if new_key in reg:
+                    data_n[new_key] = v
+
+        # for ori in orientations:
+        #     new_key = f"{k}_{ori}"
+        #     if new_key in reg:
+        #         data_n[new_key] = v
+
+    # Select data from known regions (prevents colorbar from going wild)
+    known_values = []
+    for k, v in data_n.items():
+        if k in reg:
+            known_values.append(v)
+
+    whole_reg = [f"cortex_{ori}" for ori in orientations]
+    files = [open(op.join(wd, e)).read() for e in whole_reg]
+
+    # A figure is created by the joint dimensions of the whole-brain outlines
+    ax = _create_figure_(files, figsize, background,  title, fontsize, edgecolor)
+
+    # gray background cortex
+    _render_regions_(files, ax, bordercolor, edgecolor)
+
+    # Each region is outlined
+    reg = glob(op.join(wd, '*'))
+    files = [open(e).read() for e in reg if 'cortex' not in e]
+    _render_regions_(files, ax, "lightgray", edgecolor)
+
+    # For every region with a provided value, we draw a patch with the color
+    # matching the normalized scale
+    cmap, norm = _get_cmap_(cmap, known_values, vminmax=vminmax)
+    _render_data_(data_n, wd, cmap, norm, ax, edgecolor)
+
+        # A colorbar is added
+    _add_colorbar_(ax, cmap, norm, edgecolor, fontsize * 0.75, ylabel,
+                   cbsize=3, cbpad=1)
+
+    return plt.gcf()
+
+
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     import os
     import numpy as np
 
-    files = os.listdir('data/vep')
-    _data = np.random.rand(len(files))
+
+    # data = {
+    #     'Mdl': 11,
+    #     'PMdl': 15,
+    #     'PMdm': 9,
+    #     'Mdm': 23,
+    #     'PFcdm': 17,
+    #     'PMrv': 5,
+    # }
+    data = {
+        'L_Mv': 10,
+        "R_Insula": 21,
+        "L_Sdm": 12,
+        'L_PFCvm': 3,
+        'R_VCl': 22
+    }
+    plot_marsatlas(
+        data, lr=True, cmap='Spectral_r', bordercolor='gray', background='w',
+        edgecolor='k', ylabel='Power (a.u)'
+    )
+
+    # data = {
+    #     '1': 11,
+    #     '2': 33,
+    #     '23': 44
+    # }
+
+    # files = os.listdir('data/vep')
+    # _data = np.random.rand(len(files))
     # data = {}
     # for n_f, f in enumerate(files):
     #     if 'cortex' in f: continue
     #     data[f] = _data[n_f]
 
-    data = {
-        '1': 11,
-        '2': 33,
-        '23': 44
-    }
-
-    plot_vep(data, cmap='plasma', bordercolor='gray', background='w', edgecolor='k', ylabel='Mes Couilles')
+    # plot_vep(data, cmap='plasma', bordercolor='gray', background='w',
+    #          edgecolor='k', ylabel='Power (a.u)')
     plt.show()
