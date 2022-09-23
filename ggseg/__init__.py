@@ -64,7 +64,8 @@ def _render_data_(data, wd, cmap, norm, ax, edgecolor):
             pass
 
 
-def _create_figure_(files, figsize, background, title, fontsize, edgecolor):
+def _create_figure_(files, figsize, background, title, fontsize, edgecolor,
+                    ax=None):
     import numpy as np
     import matplotlib.pyplot as plt
 
@@ -76,12 +77,25 @@ def _create_figure_(files, figsize, background, title, fontsize, edgecolor):
     ymin += yoff
     verts = np.array([(x, y + yoff) for x, y in verts])
 
-    fig = plt.figure(figsize=figsize, facecolor=background)
-    ax = fig.add_axes([0, 0, 1, 1], frameon=False, aspect=1,
-                      xlim=(xmin, xmax),  # centering
-                      ylim=(ymax, ymin),  # centering, upside down
-                      xticks=[], yticks=[])  # no ticks
-    ax.set_title(title, fontsize=fontsize, y=1.03, x=0.55, color=edgecolor)
+    # create axis (if needed)
+    if ax is None:
+        fig = plt.figure(figsize=figsize, facecolor=background)
+        ax = fig.add_axes([0, 0, 1, 1], frameon=False, aspect=1,
+                          xlim=(xmin, xmax),  # centering
+                          ylim=(ymax, ymin),  # centering, upside down
+                          xticks=[], yticks=[])  # no ticks
+    else:
+        plt.xlim(xmin, xmax)
+        plt.ylim(ymax, ymin)
+        ax.set_frame_on(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_aspect(1)
+
+    # set title (if needed)
+    if title:
+        ax.set_title(title, fontsize=fontsize, y=1.03, x=0.55, color=edgecolor)
+
     return ax
 
 
@@ -111,9 +125,9 @@ def _get_cmap_(cmap, values, vminmax=[]):
     return cmap, norm
 
 
-def plot_dk(data, cmap='Spectral', background='k', edgecolor='w', ylabel='',
-             figsize=(15, 15), bordercolor='w', vminmax=[], title='',
-             fontsize=15):
+def ggplot_dk(data, cmap='Spectral', background='k', edgecolor='w', ylabel='',
+              figsize=(15, 15), bordercolor='w', vminmax=[], title='',
+              fontsize=15):
     """Plot cortical ROI data based on a Desikan-Killiany (DK) parcellation.
 
     Parameters
@@ -176,9 +190,9 @@ def plot_dk(data, cmap='Spectral', background='k', edgecolor='w', ylabel='',
     plt.show()
 
 
-def plot_jhu(data, cmap='Spectral', background='k', edgecolor='w', ylabel='',
-             figsize=(17, 5), bordercolor='w', vminmax=[], title='',
-             fontsize=15):
+def ggplot_jhu(data, cmap='Spectral', background='k', edgecolor='w', ylabel='',
+               figsize=(17, 5), bordercolor='w', vminmax=[], title='',
+               fontsize=15):
     """Plot WM ROI data based on the Johns Hopkins University (JHU) white
     matter atlas.
 
@@ -240,9 +254,9 @@ def plot_jhu(data, cmap='Spectral', background='k', edgecolor='w', ylabel='',
     plt.show()
 
 
-def plot_aseg(data, cmap='Spectral', background='k', edgecolor='w', ylabel='',
-              figsize=(15, 5), bordercolor='w', vminmax=[],
-              title='', fontsize=15):
+def ggplot_aseg(data, cmap='Spectral', background='k', edgecolor='w', ylabel='',
+                figsize=(15, 5), bordercolor='w', vminmax=[],
+                title='', fontsize=15):
     """Plot subcortical ROI data based on the FreeSurfer `aseg` atlas
 
     Parameters
@@ -309,9 +323,9 @@ def plot_aseg(data, cmap='Spectral', background='k', edgecolor='w', ylabel='',
     plt.show()
 
 
-def plot_vep(data, cmap='Spectral', background='w', edgecolor='k', ylabel='',
-              figsize=(10, 8), bordercolor='grey', vminmax=[],
-              title='', fontsize=15):
+def ggplot_vep(data, cmap='Spectral', background='w', edgecolor='k', ylabel='',
+               figsize=(10, 8), bordercolor='grey', vminmax=[],
+               title='', fontsize=15):
     import matplotlib.pyplot as plt
     import os.path as op
     from glob import glob
@@ -364,9 +378,10 @@ def plot_vep(data, cmap='Spectral', background='w', edgecolor='k', ylabel='',
     return plt.gcf()
 
 
-def plot_marsatlas(
-        data, lr=True, cmap='Spectral', background='w', edgecolor='k', ylabel='',
-        figsize=(10, 8), bordercolor='grey', vminmax=[], title='', fontsize=15
+def ggplot_marsatlas(
+        data, lr=True, cmap='Spectral_r', background='w', edgecolor='k',
+        ylabel='', figsize=(10, 8), bordercolor='grey', vminmax=[], title='',
+        fontsize=15, ax=None
     ):
     import matplotlib.pyplot as plt
     import os.path as op
@@ -422,7 +437,9 @@ def plot_marsatlas(
     files = [open(op.join(wd, e)).read() for e in whole_reg]
 
     # A figure is created by the joint dimensions of the whole-brain outlines
-    ax = _create_figure_(files, figsize, background,  title, fontsize, edgecolor)
+    ax = _create_figure_(
+        files, figsize, background,  title, fontsize, edgecolor, ax=ax
+    )
 
     # gray background cortex
     _render_regions_(files, ax, bordercolor, edgecolor)
@@ -465,7 +482,7 @@ if __name__ == '__main__':
         'L_PFCvm': 3,
         'R_VCl': 22
     }
-    plot_marsatlas(
+    ggplot_marsatlas(
         data, lr=True, cmap='Spectral_r', bordercolor='gray', background='w',
         edgecolor='k', ylabel='Power (a.u)'
     )
@@ -483,6 +500,6 @@ if __name__ == '__main__':
     #     if 'cortex' in f: continue
     #     data[f] = _data[n_f]
 
-    # plot_vep(data, cmap='plasma', bordercolor='gray', background='w',
+    # ggplot_vep(data, cmap='plasma', bordercolor='gray', background='w',
     #          edgecolor='k', ylabel='Power (a.u)')
     plt.show()
