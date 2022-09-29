@@ -32,18 +32,30 @@ def _svg_parse_(path):
     return np.array(codes), np.concatenate(vertices)
 
 
-def _add_colorbar_(ax, cmap, norm, ec, labelsize, ylabel, cbsize=1, cbpad=1):
+def _add_colorbar_(ax, cmap, norm, ec, labelsize, ylabel, cbsize=1, cbpad=1,
+                   cbar=True, location='right'):
+    if not cbar: return None
+    assert location in ['right', 'bottom']
     import matplotlib
     from mpl_toolkits.axes_grid1 import make_axes_locatable
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes('right', size=f'{cbsize}%', pad=cbpad)
 
-    cb1 = matplotlib.colorbar.ColorbarBase(cax, cmap=cmap,
-                                           norm=norm,
-                                           orientation='vertical',
-                                           ticklocation='left')
-    cb1.ax.tick_params(labelcolor=ec, labelsize=labelsize)
-    cb1.ax.set_ylabel(ylabel, color=ec, fontsize=labelsize)
+    # get parameters
+    if location == 'right':
+        ax_loc, cb_orient = 'right', 'vertical'
+    elif location == 'bottom':
+        ax_loc, cb_orient = 'bottom', 'horizontal'
+
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes(ax_loc, size=f'{cbsize}%', pad=cbpad)
+
+    cb1 = matplotlib.colorbar.ColorbarBase(
+        cax, cmap=cmap, norm=norm, orientation=cb_orient, ticklocation=location
+    )
+    cb1.ax.tick_params()
+    if location == 'right':
+        cb1.ax.set_ylabel(ylabel)
+    elif location == 'bottom':
+        cb1.ax.set_xlabel(ylabel)
 
 
 def _render_data_(data, wd, cmap, norm, ax, edgecolor):
@@ -94,7 +106,7 @@ def _create_figure_(files, figsize, background, title, fontsize, edgecolor,
 
     # set title (if needed)
     if title:
-        ax.set_title(title, fontsize=fontsize, y=1.03, x=0.55, color=edgecolor)
+        ax.set_title(title, y=1.03, x=0.55, fontweight='bold')
 
     return ax
 
@@ -323,9 +335,11 @@ def ggplot_aseg(data, cmap='Spectral', background='k', edgecolor='w', ylabel='',
     plt.show()
 
 
-def ggplot_vep(data, cmap='Spectral', background='w', edgecolor='k', ylabel='',
-               figsize=(10, 8), bordercolor='grey', vminmax=[],
-               title='', fontsize=15):
+def ggplot_vep(
+        data, cmap='Spectral', background='w', edgecolor='k', ylabel='',
+        figsize=(10, 8), bordercolor='grey', vminmax=[], title='', fontsize=15,
+        ax=None, cbar=True, cbar_loc='right'
+    ):
     import matplotlib.pyplot as plt
     import os.path as op
     from glob import glob
@@ -356,7 +370,9 @@ def ggplot_vep(data, cmap='Spectral', background='w', edgecolor='k', ylabel='',
     files = [open(op.join(wd, e)).read() for e in whole_reg]
 
     # A figure is created by the joint dimensions of the whole-brain outlines
-    ax = _create_figure_(files, figsize, background,  title, fontsize, edgecolor)
+    ax = _create_figure_(
+        files, figsize, background,  title, fontsize, edgecolor, ax=ax
+    )
 
     # gray background cortex
     _render_regions_(files, ax, bordercolor, edgecolor)
@@ -371,9 +387,10 @@ def ggplot_vep(data, cmap='Spectral', background='w', edgecolor='k', ylabel='',
     cmap, norm = _get_cmap_(cmap, known_values, vminmax=vminmax)
     _render_data_(data_n, wd, cmap, norm, ax, edgecolor)
 
-        # A colorbar is added
+    # A colorbar is added
     _add_colorbar_(ax, cmap, norm, edgecolor, fontsize * 0.75, ylabel,
-                   cbsize=3, cbpad=2)
+                   cbsize=4, cbpad=.5, cbar=cbar, location=cbar_loc
+    )
 
     return plt.gcf()
 
@@ -400,12 +417,6 @@ def ggplot_marsatlas(
     # get names of all brain regions
     wd = op.join(op.dirname(ggseg.__file__), 'data', 'marsatlas')
     reg = [op.basename(e) for e in glob(op.join(wd, '*'))]
-
-    # add left and right information (if needed)
-    # if lr:
-    #     for k in range(len(reg)):
-    #         h = 'L' if 'left' in reg[k] else 'R'
-    #         reg[k] = f'{h}_{reg[k]}'
 
     # rebuild data for matching with orientations
     data_n = {}
