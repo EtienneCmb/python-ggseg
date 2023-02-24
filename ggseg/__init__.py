@@ -338,58 +338,105 @@ def ggplot_aseg(data, cmap='Spectral', background='k', edgecolor='w', ylabel='',
 def ggplot_vep(
         data, cmap='Spectral', background='w', edgecolor='k', ylabel='',
         figsize=(10, 8), bordercolor='grey', vminmax=[], title='', fontsize=15,
-        ax=None, cbar=True, cbar_loc='right'
+        ax=None, cbar=True, cbar_loc='right', views=['internal', 'external'],
+        hemispheres=['left', 'right']
     ):
+    """Plot using the VEP atlas.
+
+    Parameters
+    ----------
+    data : dict
+        Keys are brain region names and values are attached to each parcel.
+        To dissociate between left and right hemispheres, append '_left', '_l'
+        or '_lh' (same for right)
+    views : list
+        List of views. Use either 'internal', 'external', 'frontal'
+    hemispheres : list
+        Use either 'left' and/or 'right'
+    """
     import matplotlib.pyplot as plt
     import os.path as op
     from glob import glob
     import ggseg
+    import warnings
 
-    # possible orientations
-    orientations = ['external_left', 'internal_left', 'front_left']
+    # -------------------------------------------------------------------------
+    # define patterns to recognize left / right hemispheres
+    l_pat = ['left', '_l', '_lh']
+    r_pat = ['right', '_r', '_rh']
 
-    # get names of all brain regions
+    # -------------------------------------------------------------------------
+    # get working directory
     wd = op.join(op.dirname(ggseg.__file__), 'data', 'vep')
-    reg = [op.basename(e) for e in glob(op.join(wd, '*'))]
 
-    # rebuild data for matching with orientations
-    data_n = {}
+    # build orientations
+    orientations = []
+    for v in views:
+        for h in hemispheres:
+            orientations.append(f"{v}_{h}")
+
+    # build cortex files
+    cortex_file = [open(op.join(wd, o, "cortex")).read() for o in orientations]
+
+    # build all files
+    all_files = []
+    for o in orientations:
+        all_files += [e for e in glob(op.join(wd, o, '*'))]
+    all_files = [open(e).read() for e in all_files if 'cortex' not in e]
+
+    # build data files
+    data_n, ignored = {}, []
     for k, v in data.items():
-        for ori in orientations:
-            new_key = f"{k}_{ori}"
-            if new_key in reg:
-                data_n[new_key] = v
+        # split in region / hemisphere names
+        reg = k.split('_')[0]
 
-    # Select data from known regions (prevents colorbar from going wild)
-    known_values = []
-    for k, v in data_n.items():
-        if k in reg:
-            known_values.append(v)
+        # determine which hemisphere to use
+        if any([h in k for h in l_pat]):
+            hemi = 'left'
+        elif any([h in k for h in r_pat]):
+            hemi = 'right'
+        else:
+            ignored.append(k)
+            continue
 
-    whole_reg = [f"cortex_{ori}" for ori in orientations]
-    files = [open(op.join(wd, e)).read() for e in whole_reg]
+        # skip if hemisphere not plotted
+        if hemi not in hemispheres:
+            ignored.append(k)
+            continue
 
+        # else, append views
+        for vi in views:
+            data_n[op.join(wd, f"{vi}_{hemi}", reg)] = v
+
+    # print ignored regions
+    if len(ignored):
+        warnings.warn(
+            f"Some regions have been ignored either because it's not\npossible "
+            f"to infer the hemisphere either because the hemisphere\nis not "
+            f"plotted :\n{', '.join(ignored)}"
+        )
+
+    # -------------------------------------------------------------------------
     # A figure is created by the joint dimensions of the whole-brain outlines
     ax = _create_figure_(
-        files, figsize, background,  title, fontsize, edgecolor, ax=ax
+        cortex_file, figsize, background,  title, fontsize, edgecolor, ax=ax
     )
 
     # gray background cortex
-    _render_regions_(files, ax, bordercolor, edgecolor)
+    _render_regions_(cortex_file, ax, bordercolor, edgecolor)
 
     # Each region is outlined
-    reg = glob(op.join(wd, '*'))
-    files = [open(e).read() for e in reg if 'cortex' not in e]
-    _render_regions_(files, ax, "lightgray", edgecolor)
+    _render_regions_(all_files, ax, "lightgray", edgecolor)
 
     # For every region with a provided value, we draw a patch with the color
     # matching the normalized scale
-    cmap, norm = _get_cmap_(cmap, known_values, vminmax=vminmax)
-    _render_data_(data_n, wd, cmap, norm, ax, edgecolor)
+    cmap, norm = _get_cmap_(cmap, data_n.values(), vminmax=vminmax)
+    _render_data_(data_n, '', cmap, norm, ax, edgecolor)
 
     # A colorbar is added
-    _add_colorbar_(ax, cmap, norm, edgecolor, fontsize * 0.75, ylabel,
-                   cbsize=4, cbpad=.5, cbar=cbar, location=cbar_loc
+    _add_colorbar_(
+        ax, cmap, norm, edgecolor, fontsize * 0.75, ylabel, cbsize=4, cbpad=.5,
+        cbar=cbar, location=cbar_loc
     )
 
     return plt.gcf()
@@ -398,7 +445,7 @@ def ggplot_vep(
 def ggplot_marsatlas(
         data, lr=True, cmap='Spectral_r', background='w', edgecolor='k',
         ylabel='', figsize=(10, 8), bordercolor='grey', vminmax=[], title='',
-        fontsize=15, ax=None
+        fontsize=15, ax=None, cbar=True, cbar_loc='right'
     ):
     import matplotlib.pyplot as plt
     import os.path as op
@@ -465,9 +512,11 @@ def ggplot_marsatlas(
     cmap, norm = _get_cmap_(cmap, known_values, vminmax=vminmax)
     _render_data_(data_n, wd, cmap, norm, ax, edgecolor)
 
-        # A colorbar is added
-    _add_colorbar_(ax, cmap, norm, edgecolor, fontsize * 0.75, ylabel,
-                   cbsize=3, cbpad=1)
+    # A colorbar is added
+    _add_colorbar_(
+        ax, cmap, norm, edgecolor, fontsize * 0.75, ylabel, cbsize=3, cbpad=1,
+        cbar=cbar, location=cbar_loc
+    )
 
     return plt.gcf()
 
@@ -486,23 +535,38 @@ if __name__ == '__main__':
     #     'PFcdm': 17,
     #     'PMrv': 5,
     # }
-    data = {
-        'L_Mv': 10,
-        "R_Insula": 21,
-        "L_Sdm": 12,
-        'L_PFCvm': 3,
-        'R_VCl': 22
-    }
-    ggplot_marsatlas(
-        data, lr=True, cmap='Spectral_r', bordercolor='gray', background='w',
-        edgecolor='k', ylabel='Power (a.u)'
-    )
+    # data = {
+    #     'L_Mv': 10,
+    #     "R_Insula": 21,
+    #     "L_Sdm": 12,
+    #     'L_PFCvm': 3,
+    #     'R_VCl': 22
+    # }
+    # ggplot_marsatlas(
+    #     data, lr=True, cmap='Spectral_r', bordercolor='gray', background='w',
+    #     edgecolor='k', ylabel='Power (a.u)'
+    # )
 
     # data = {
-    #     '1': 11,
-    #     '2': 33,
-    #     '23': 44
+    #     'Mdl': 11,
+    #     'PMdl': 15,
+    #     'PMdm': 9,
+    #     'Mdm': 23,
+    #     'PFcdm': 17,
+    #     'PMrv': 5,
     # }
+
+    # ggplot_vep(
+    #     data, cmap='Spectral_r', bordercolor='gray', background='w',
+    #     edgecolor='k', ylabel='Power (a.u)'
+    # )
+
+    data = {
+        '1_left': 11,
+        '2_right': 33,
+        '1_right': 44,
+        '30_left': 25
+    }
 
     # files = os.listdir('data/vep')
     # _data = np.random.rand(len(files))
@@ -511,6 +575,9 @@ if __name__ == '__main__':
     #     if 'cortex' in f: continue
     #     data[f] = _data[n_f]
 
-    # ggplot_vep(data, cmap='plasma', bordercolor='gray', background='w',
-    #          edgecolor='k', ylabel='Power (a.u)')
+    ggplot_vep(
+        data, cmap='plasma', ylabel='Power (a.u)',
+        views=['internal', 'external'], hemispheres=['left', 'right'],
+        cbar_loc='bottom'
+    )
     plt.show()
